@@ -15,5 +15,6 @@ py_library(
 	],
     data = [
         "//compiler_gym/envs/gcc_multienv/service:gcc-multienv-service-bin",
+        "//compiler_gym/envs/gcc_multienv/kernel:gcc-multienv-kernel-bin",
     ],
 )
