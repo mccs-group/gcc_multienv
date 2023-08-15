@@ -50,6 +50,6 @@ register(
         kwargs={
             "service": GCC_MULTIENV_SERVICE_BINARY,
             "rewards": [SizeRuntimeReward()],
-            "datasets": [CBenchDataset()],
+            "datasets": [MultienvDataset()],
         },
 )

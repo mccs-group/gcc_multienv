@@ -4,7 +4,7 @@ py_library(
 	name = "datasets",
 	srcs = [
 		"__init__.py",
-		"cbench.py",
+		"multienv_kernel.py",
 	],
 	visibility = ["//visibility:public"],
 	deps = [

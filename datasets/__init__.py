@@ -1,6 +1,6 @@
-from compiler_gym.envs.gcc_multienv.datasets.cbench import CBenchDataset
+from compiler_gym.envs.gcc_multienv.datasets.multienv_kernel import MultienvDataset
 
 __all__ = [
-    "CBenchDataset",
+    "MultienvDataset",
     ]
 
