@@ -19,11 +19,11 @@ from shutil import (copytree, copy2)
 from compiler_gym.datasets import (BenchmarkUri, Benchmark)
 from subprocess import *
 from time import *
-from compiler_gym.envs.gcc_pr.shuffler import *
+from compiler_gym.envs.gcc_multienv.shuffler import *
 import os
 import re
 
-class GccPRCompilationSession(CompilationSession):
+class GccMultienvCompilationSession(CompilationSession):
 
     compiler_version: str = "7.3.0"
 
@@ -293,6 +293,6 @@ class GccPRCompilationSession(CompilationSession):
         return passes
 
 if __name__ == "__main__":
-    create_and_run_compiler_gym_service(GccPRCompilationSession)
+    create_and_run_compiler_gym_service(GccMultienvCompilationSession)
 
 

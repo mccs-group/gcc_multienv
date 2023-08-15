@@ -4,10 +4,10 @@ from compiler_gym.spaces import Reward
 from compiler_gym.util.registration import register
 from compiler_gym.util.runfiles_path import runfiles_path
 
-from compiler_gym.envs.gcc_pr.datasets import *
+from compiler_gym.envs.gcc_multienv.datasets import *
 import math
 
-GCC_PR_SERVICE_BINARY: Path = runfiles_path("compiler_gym/envs/gcc_pr/service/gcc-pr-service")
+GCC_MULTIENV_SERVICE_BINARY: Path = runfiles_path("compiler_gym/envs/gcc_multienv/service/gcc-multienv-service")
 
 class SizeRuntimeReward(Reward):
 
@@ -45,10 +45,10 @@ class SizeRuntimeReward(Reward):
         return size_delta
 
 register(
-        id="gcc_pr-v0",
+        id="gcc_multienv-v0",
         entry_point="compiler_gym.service.client_service_compiler_env:ClientServiceCompilerEnv",
         kwargs={
-            "service": GCC_PR_SERVICE_BINARY,
+            "service": GCC_MULTIENV_SERVICE_BINARY,
             "rewards": [SizeRuntimeReward()],
             "datasets": [CBenchDataset()],
         },

@@ -1,20 +1,20 @@
 filegroup(
-	name = "gcc-pr-service-files",
+	name = "gcc-multienv-service-files",
 	srcs = [
-		"gcc_pr_service.py",
+		"gcc_multienv_service.py",
 	],
     visibility = ["//visibility:public"],
 )
 
 genrule(
-    name = "gcc-pr-service-bin",
+    name = "gcc-multienv-service-bin",
     srcs = [
-        ":gcc-pr-service-files",
+        ":gcc-multienv-service-files",
     ],
     outs = [
-        "gcc-pr-service",
+        "gcc-multienv-service",
     ],
-    cmd = "cp $(location :gcc-pr-service-files) $@ && " +
+    cmd = "cp $(location :gcc-multienv-service-files) $@ && " +
         "chmod 666 $@",
     visibility = ["//visibility:public"],
 )
