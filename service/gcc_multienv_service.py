@@ -14,6 +14,7 @@ from compiler_gym.service.proto import (
     Int64Range,
     ListEvent,
     ByteSequenceSpace,
+    ByteTensor,
 )
 from compiler_gym.service.runtime import create_and_run_compiler_gym_service
 from shutil import copytree, copy2, rmtree
@@ -233,7 +234,9 @@ class GccMultienvCompilationSession(CompilationSession):
         elif observation_space.name == "base_size":
             return Event(int64_value=self.baseline_size)
         elif observation_space.name == "embedding":
-            return Event(byte_tensor=self.embedding)
+            return Event(
+                byte_tensor=ByteTensor(shape=[len(self.embedding)], value=self.embedding)
+            )
         elif observation_space.name == "passes":
             return Event(
                 event_list=ListEvent(
@@ -292,16 +295,7 @@ class GccMultienvCompilationSession(CompilationSession):
     def attach_backend(self):
         kernel_dir = f"/tmp/{self.bench_name}:backend_{self.instance}"
 
-        if os.path.exists(
-            kernel_dir
-        ):  # If a dir for our kernel already exists, wait for it to start and connect to it
-            while True:
-                try:
-                    self.soc.connect(f"\0{self.bench_name}:backend_{self.instance}")
-                except ConnectionRefusedError:
-                    continue
-                return
-        else:  # If our kernel is missing, set it up
+        try:
             os.makedirs(kernel_dir)
 
             if "embedding_length" in self.parsed_bench.params:
@@ -362,19 +356,21 @@ class GccMultienvCompilationSession(CompilationSession):
             # Start kernel process
             Popen(list(filter(None, popen_args)), cwd=kernel_dir)
 
-            print("Started kernel, trying to connect")
-
             # Wait for it to set up socket and connect to it
             while True:
                 try:
-                    self.soc.connect(
-                        f"\0{self.bench_name}:backend_{self.instance}"
-                    )
+                    self.soc.connect(f"\0{self.bench_name}:backend_{self.instance}")
                 except ConnectionRefusedError:
                     continue
-                print("Connected to new kernel")
                 return
 
+        except FileExistsError:
+            while True:
+                try:
+                    self.soc.connect(f"\0{self.bench_name}:backend_{self.instance}")
+                except ConnectionRefusedError:
+                    continue
+                return
 
 if __name__ == "__main__":
     create_and_run_compiler_gym_service(GccMultienvCompilationSession)
