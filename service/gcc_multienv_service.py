@@ -13,8 +13,8 @@ from compiler_gym.service.proto import (
     DoubleRange,
     Int64Range,
     ListEvent,
-    ByteSequenceSpace,
-    ByteTensor,
+    Int64SequenceSpace,
+    Int64Tensor,
 )
 from compiler_gym.service.runtime import create_and_run_compiler_gym_service
 from shutil import copytree, copy2, rmtree
@@ -125,7 +125,18 @@ class GccMultienvCompilationSession(CompilationSession):
         ObservationSpace(
             name="embedding",
             space=Space(
-                byte_sequence=ByteSequenceSpace(length_range=Int64Range(min=0)),
+                int64_sequence=Int64SequenceSpace(length_range=Int64Range(min=0)),
+            ),
+            deterministic=True,
+            platform_dependent=True,
+            default_observation=Event(
+                int64_value=0,
+            ),
+        ),
+        ObservationSpace(
+            name="base_embedding",
+            space=Space(
+                int64_sequence=Int64SequenceSpace(length_range=Int64Range(min=0)),
             ),
             deterministic=True,
             platform_dependent=True,
@@ -144,6 +155,7 @@ class GccMultienvCompilationSession(CompilationSession):
         self.baseline_size = None
         self.baseline_runtime_sec = None
         self.baseline_runtime_percent = None
+        self.baseline_embedding = None
         self._lists_valid = True
         self.pass_list = []
 
@@ -173,7 +185,7 @@ class GccMultienvCompilationSession(CompilationSession):
 
     def apply_action(self, action: Event) -> Tuple[bool, Optional[ActionSpace], bool]:
         action_string = action.string_value
-        if action_string == None:
+        if action_string == "":
             raise ValueError("Expected pass name, got None")
         logging.info("Applying action %s", action_string)
 
@@ -202,9 +214,7 @@ class GccMultienvCompilationSession(CompilationSession):
             new_space = None
             return True, new_space, True
         else:
-            new_list = get_action_list(
-                self.actions_lib, [], self.get_list(pass_list), pass_list
-            )
+            new_list = get_action_list(self.actions_lib, [], self.pass_list, 2)
             if new_list != []:
                 new_space = ActionSpace(
                     name="new_space",
@@ -235,7 +245,15 @@ class GccMultienvCompilationSession(CompilationSession):
             return Event(int64_value=self.baseline_size)
         elif observation_space.name == "embedding":
             return Event(
-                byte_tensor=ByteTensor(shape=[len(self.embedding)], value=self.embedding)
+                int64_tensor=Int64Tensor(
+                    shape=[len(self.embedding)], value=self.embedding
+                )
+            )
+        elif observation_space.name == "base_embedding":
+            return Event(
+                int64_tensor=Int64Tensor(
+                    shape=[len(self.baseline_embedding)], value=self.baseline_embedding
+                )
             )
         elif observation_space.name == "passes":
             return Event(
@@ -249,18 +267,22 @@ class GccMultienvCompilationSession(CompilationSession):
             raise KeyError(observation_space.name)
 
     def get_baseline(self):
-        recv_name = self.soc.recv(4096)
-        if recv_name.decode("utf-8") != self.fun_name:
+        self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
+        recv_name = self.soc.recv(4096).decode("utf-8")
+        if recv_name != self.fun_name:
             print(
                 (
                     f"Got unexpected function name from backend. "
-                    f"Expected [{self.fun_name}] got [{recv_name.decode('utf-8')}]"
+                    f"Expected [{self.fun_name}] got [{recv_name}]"
                 ),
                 file=sys.stderr,
             )
             raise ValueError("Got unexpected function name from backend")
-        self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
-        self.soc.recv(4096)  # Discard embedding message
+        while True:
+            embedding_msg = self.soc.recv(1024)
+            if embedding_msg != bytes(0):
+                break
+        self.baseline_embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
         rec_data = self.soc.recv(24)
         rec_data = struct.unpack("ddi", rec_data)
         self.baseline_size = rec_data[2]
@@ -268,24 +290,28 @@ class GccMultienvCompilationSession(CompilationSession):
         self.baseline_runtime_sec = rec_data[1]
 
     def get_state(self):
-        recv_name = self.soc.recv(4096)
-        if recv_name.decode("utf-8") != self.fun_name:
-            print(
-                (
-                    f"Got unexpected function name from backend. "
-                    f"Expected [{self.fun_name}] got [{recv_name.decode('utf-8')}]"
-                ),
-                file=sys.stderr,
-            )
-            raise ValueError("Got unexpected function name from backend")
         if self.pass_list == []:
             self.soc.send(
                 "?".encode("utf-8")
             )  # Send '?' as pass list to get empty list stats
         else:
-            list_msg = "\n".join(self.pass_list).encode("utf-8")
+            list_msg = ("\n".join(self.pass_list) + "\n").encode("utf-8")
             self.soc.send(list_msg)
-        self.embedding = self.soc.recv(4096)
+        recv_name = self.soc.recv(4096).decode("utf-8")
+        if recv_name != self.fun_name:
+            print(
+                (
+                    f"Got unexpected function name from backend. "
+                    f"Expected [{self.fun_name}] got [{recv_name}]"
+                ),
+                file=sys.stderr,
+            )
+            raise ValueError("Got unexpected function name from backend")
+        while True:
+            embedding_msg = self.soc.recv(1024)
+            if embedding_msg != bytes(0):
+                break
+        self.embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
         rec_data = self.soc.recv(24)
         rec_data = struct.unpack("ddi", rec_data)
         self.size = rec_data[2]
@@ -371,6 +397,7 @@ class GccMultienvCompilationSession(CompilationSession):
                 except ConnectionRefusedError:
                     continue
                 return
+
 
 if __name__ == "__main__":
     create_and_run_compiler_gym_service(GccMultienvCompilationSession)
