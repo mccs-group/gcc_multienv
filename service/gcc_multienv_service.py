@@ -158,6 +158,7 @@ class GccMultienvCompilationSession(CompilationSession):
         self.baseline_embedding = None
         self._lists_valid = True
         self.pass_list = []
+        self.current_action_space = self.action_spaces[0]
 
         self.bench_name = " ".join(self.parsed_bench.params["bench_name"])
         self.fun_name = " ".join(self.parsed_bench.params["fun_name"])
@@ -184,9 +185,13 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.info("Started a compilation session for %s", benchmark.uri)
 
     def apply_action(self, action: Event) -> Tuple[bool, Optional[ActionSpace], bool]:
-        action_string = action.string_value
-        if action_string == "":
-            raise ValueError("Expected pass name, got None")
+        if action.string_value != "":
+            action_string = action.string_value
+        else:
+            logging.debug(type(self.current_action_space.space))
+            logging.debug(self.current_action_space[action.int64_value])
+            action_string = self.current_action_space._string(action.int64_value)
+
         logging.info("Applying action %s", action_string)
 
         if (
@@ -225,6 +230,7 @@ class GccMultienvCompilationSession(CompilationSession):
             else:
                 new_space = None
 
+        self.current_action_space = new_space
         self.get_state()
 
         return True if new_space == None else False, new_space, False
@@ -266,30 +272,29 @@ class GccMultienvCompilationSession(CompilationSession):
         else:
             raise KeyError(observation_space.name)
 
-    def get_baseline(self):
-        self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
-        recv_name = self.soc.recv(4096).decode("utf-8")
-        if recv_name != self.fun_name:
-            print(
-                (
-                    f"Got unexpected function name from backend. "
-                    f"Expected [{self.fun_name}] got [{recv_name}]"
-                ),
-                file=sys.stderr,
-            )
-            raise ValueError("Got unexpected function name from backend")
+    def padded_recv(self, size):
         while True:
-            embedding_msg = self.soc.recv(1024)
-            if embedding_msg != bytes(0):
-                break
+            data = self.soc.recv(size)
+            if data != bytes(0):
+                return data
+
+    def get_baseline(self):
+        logging.debug("Getting baseline")
+        self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
+        logging.debug("Sent first list")
+        embedding_msg = self.padded_recv(1024)
+        logging.debug("Got embedding")
         self.baseline_embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
-        rec_data = self.soc.recv(24)
+        rec_data = self.padded_recv(24)
+        logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
         self.baseline_size = rec_data[2]
         self.baseline_runtime_percent = rec_data[0]
         self.baseline_runtime_sec = rec_data[1]
+        logging.debug("Got all baseline")
 
     def get_state(self):
+        logging.debug("Getting state")
         if self.pass_list == []:
             self.soc.send(
                 "?".encode("utf-8")
@@ -297,26 +302,16 @@ class GccMultienvCompilationSession(CompilationSession):
         else:
             list_msg = ("\n".join(self.pass_list) + "\n").encode("utf-8")
             self.soc.send(list_msg)
-        recv_name = self.soc.recv(4096).decode("utf-8")
-        if recv_name != self.fun_name:
-            print(
-                (
-                    f"Got unexpected function name from backend. "
-                    f"Expected [{self.fun_name}] got [{recv_name}]"
-                ),
-                file=sys.stderr,
-            )
-            raise ValueError("Got unexpected function name from backend")
-        while True:
-            embedding_msg = self.soc.recv(1024)
-            if embedding_msg != bytes(0):
-                break
+        embedding_msg = self.padded_recv(1024)
+        logging.debug("Got embedding")
         self.embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
-        rec_data = self.soc.recv(24)
+        rec_data = self.padded_recv(24)
+        logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
         self.size = rec_data[2]
         self.runtime_percent = rec_data[0]
         self.runtime_sec = rec_data[1]
+        logging.debug("Got all state")
 
     def attach_backend(self):
         kernel_dir = f"/tmp/{self.bench_name}:backend_{self.instance}"
