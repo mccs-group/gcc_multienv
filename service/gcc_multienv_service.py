@@ -188,9 +188,7 @@ class GccMultienvCompilationSession(CompilationSession):
         if action.string_value != "":
             action_string = action.string_value
         else:
-            logging.debug(type(self.current_action_space.space))
-            logging.debug(self.current_action_space[action.int64_value])
-            action_string = self.current_action_space._string(action.int64_value)
+            action_string = self.current_action_space.space.named_discrete.name[action.int64_value]
 
         logging.info("Applying action %s", action_string)
 
