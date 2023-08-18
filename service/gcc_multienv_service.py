@@ -188,7 +188,9 @@ class GccMultienvCompilationSession(CompilationSession):
         if action.string_value != "":
             action_string = action.string_value
         else:
-            action_string = self.current_action_space.space.named_discrete.name[action.int64_value]
+            action_string = self.current_action_space.space.named_discrete.name[
+                action.int64_value
+            ]
 
         logging.info("Applying action %s", action_string)
 
@@ -331,12 +333,11 @@ class GccMultienvCompilationSession(CompilationSession):
             else:
                 build_string = ""
 
+            run_arr = []
             if "run_string" in self.parsed_bench.params:
-                run_string = (
-                    f"""-r {" ".join(self.parsed_bench.params["run_string"])}"""
-                )
-            else:
-                run_string = ""
+                for rstr in self.parsed_bench.params["run_string"]:
+                    run_string = f"""-r{rstr}"""
+                    run_arr.append(run_string)
 
             if "bench_repeats" in self.parsed_bench.params:
                 bench_repeats = (
@@ -366,7 +367,7 @@ class GccMultienvCompilationSession(CompilationSession):
                 kernel_bin,
                 embedding_length,
                 build_string,
-                run_string,
+                *run_arr,
                 plugin_path,
                 name_string,
                 instance_num,

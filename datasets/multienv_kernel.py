@@ -2,6 +2,7 @@ from compiler_gym.datasets import Benchmark, Dataset, BenchmarkUri
 from typing import Iterable
 from pathlib import Path
 import os
+from itertools import chain
 
 
 class MultienvDataset(Dataset):
@@ -34,12 +35,14 @@ class MultienvDataset(Dataset):
 
     def parse_benchmarks(self):
         if self._path == None:
-            self.benches == ['']
+            self.benches == [""]
             return
         else:
             self.benches = []
-            datafiles = self._path.glob("*/benchmark_info.txt")
-            for file in datafiles:
+            for file in chain(
+                self._path.glob("*/benchmark_info.txt"),
+                self._path.glob("benchmark_info.txt"),
+            ):
                 self.parse_file(file)
 
     def parse_file(self, file: Path):
@@ -51,10 +54,10 @@ class MultienvDataset(Dataset):
         else:
             uri_build = ""
 
-        if "run:" in lines:
-            uri_run = "run_string=" + lines[lines.index("run:") + 1] + "&"
-        else:
-            uri_run = ""
+        run_indices = [i for i, e in enumerate(lines) if e == "run:"]
+        uri_run = ""
+        for ind in run_indices:
+            uri_run += "run_string=" + lines[ind + 1] + "&"
 
         if "embedding_length:" in lines:
             uri_embedding_length = (
