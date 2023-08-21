@@ -333,6 +333,8 @@ class GccMultienvCompilationSession(CompilationSession):
             else:
                 build_string = ""
 
+            build_string = build_string.replace("lstdc", "lstdc++")
+
             run_arr = []
             if "run_string" in self.parsed_bench.params:
                 for rstr in self.parsed_bench.params["run_string"]:
