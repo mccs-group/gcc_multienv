@@ -3,6 +3,7 @@ from typing import Iterable
 from pathlib import Path
 import os
 from itertools import chain
+import random
 
 
 class MultienvDataset(Dataset):
@@ -46,7 +47,7 @@ class MultienvDataset(Dataset):
                 self.parse_file(file)
 
     def parse_file(self, file: Path):
-        uri_dataset = "multienv_kernel"
+        uri_dataset = "multienv"
         uri_path = str(file.resolve().parent) + "/"
         lines = [x.strip() for x in file.read_text().splitlines()]
         if "build:" in lines:
@@ -106,3 +107,9 @@ class MultienvDataset(Dataset):
 
     def benchmark_from_parsed_uri(self, uri: BenchmarkUri) -> Benchmark:
         return Benchmark.from_file_contents(uri, None)
+
+    def random_benchmark(self, random_state=None) -> Benchmark:
+        random.seed(random_state)
+        if self.benches == []:
+            self.parse_benchmarks()
+        return random.choice(self.benches)
