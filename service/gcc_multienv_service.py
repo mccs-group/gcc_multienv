@@ -158,7 +158,11 @@ class GccMultienvCompilationSession(CompilationSession):
         self.baseline_embedding = None
         self._lists_valid = True
         self.pass_list = []
+        self.indented_pass_list = []
         self.current_action_space = self.action_spaces[0]
+        self.embedding = None
+        self.orig_properties = None
+        self.custom_properties = None
 
         self.bench_name = " ".join(self.parsed_bench.params["bench_name"])
         self.fun_name = " ".join(self.parsed_bench.params["fun_name"])
@@ -177,6 +181,13 @@ class GccMultienvCompilationSession(CompilationSession):
             break
 
         self.attach_backend()
+
+        self.orig_properties, self.custom_properties = get_property_by_history(
+            self.actions_lib, self.pass_list, 2
+        )
+
+        self.orig_properties = self.orig_properties.value
+        self.custom_properties = self.custom_properties.value
 
         self.get_baseline()
 
@@ -210,6 +221,10 @@ class GccMultienvCompilationSession(CompilationSession):
         if list_num != 2:
             raise ValueError(f"Unknown pass {action_string}")
 
+        self.orig_properties, self.custom_properties = get_property_by_history(
+            self.actions_lib, self.pass_list, 2
+        )
+
         self.pass_list.append(action_string)
 
         self._lists_valid = True
@@ -229,6 +244,18 @@ class GccMultienvCompilationSession(CompilationSession):
                 )
             else:
                 new_space = None
+
+        self.orig_properties = self.orig_properties.value
+        self.custom_properties = self.custom_properties.value
+
+        if action_string == "fix_loops":
+            self.indented_pass_list.append("fix_loops")
+            self.indented_pass_list.append("loop")
+            self.indented_pass_list.append(">loopinit")
+        elif in_loop(self.actions_lib, self.custom_properties):
+            self.indented_pass_list.append(">" + action_string)
+        else:
+            self.indented_pass_list.append(action_string)
 
         self.current_action_space = new_space
         self.get_state()
@@ -265,7 +292,7 @@ class GccMultienvCompilationSession(CompilationSession):
             return Event(
                 event_list=ListEvent(
                     event=list(
-                        map(lambda name: Event(string_value=name), self.pass_list)
+                        map(lambda name: Event(string_value=name), self.indented_pass_list)
                     )
                 )
             )
@@ -284,7 +311,8 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Sent first list")
         embedding_msg = self.padded_recv(1024)
         logging.debug("Got embedding")
-        self.baseline_embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        self.baseline_embedding = embedding + [self.orig_properties, self.custom_properties]
         rec_data = self.padded_recv(24)
         logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
@@ -295,16 +323,17 @@ class GccMultienvCompilationSession(CompilationSession):
 
     def get_state(self):
         logging.debug("Getting state")
-        if self.pass_list == []:
+        if self.indented_pass_list == []:
             self.soc.send(
                 "?".encode("utf-8")
             )  # Send '?' as pass list to get empty list stats
         else:
-            list_msg = ("\n".join(self.pass_list) + "\n").encode("utf-8")
+            list_msg = ("\n".join(self.indented_pass_list) + "\n").encode("utf-8")
             self.soc.send(list_msg)
         embedding_msg = self.padded_recv(1024)
         logging.debug("Got embedding")
-        self.embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        self.embedding = embedding + [self.orig_properties, self.custom_properties]
         rec_data = self.padded_recv(24)
         logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
@@ -393,7 +422,6 @@ class GccMultienvCompilationSession(CompilationSession):
                 except ConnectionRefusedError:
                     continue
                 return
-
 
 if __name__ == "__main__":
     create_and_run_compiler_gym_service(GccMultienvCompilationSession)
