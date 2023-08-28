@@ -27,6 +27,8 @@ import re
 import socket
 import errno
 import struct
+import hashlib
+import base64
 
 
 class GccMultienvCompilationSession(CompilationSession):
@@ -169,9 +171,19 @@ class GccMultienvCompilationSession(CompilationSession):
 
         self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM, 0)
         self.instance = 0
+        avail_length = 107 - len(self.bench_name) - len(str(self.instance)) - 2
+        if len(self.fun_name) > avail_length:
+            name_hash = hashlib.sha256(self.fun_name.encode("utf-8")).digest()
+            self.sock_fun_name = base64.b64encode(
+                name_hash, "-_".encode("utf-8")
+            ).decode("utf-8")
+        else:
+            self.sock_fun_name = self.fun_name
         while True:  # Find self instance number and bind to corresponding socket
             try:
-                self.soc.bind(f"\0{self.bench_name}:{self.fun_name}_{self.instance}")
+                self.soc.bind(
+                    f"\0{self.bench_name}:{self.sock_fun_name}_{self.instance}"
+                )
             except OSError as e:
                 if e.errno != errno.EADDRINUSE:
                     raise
@@ -185,9 +197,6 @@ class GccMultienvCompilationSession(CompilationSession):
         self.orig_properties, self.custom_properties = get_property_by_history(
             self.actions_lib, self.pass_list, 2
         )
-
-        self.orig_properties = self.orig_properties.value
-        self.custom_properties = self.custom_properties.value
 
         self.get_baseline()
 
@@ -245,9 +254,6 @@ class GccMultienvCompilationSession(CompilationSession):
             else:
                 new_space = None
 
-        self.orig_properties = self.orig_properties.value
-        self.custom_properties = self.custom_properties.value
-
         if action_string == "fix_loops":
             self.indented_pass_list.append("fix_loops")
             self.indented_pass_list.append("loop")
@@ -292,7 +298,10 @@ class GccMultienvCompilationSession(CompilationSession):
             return Event(
                 event_list=ListEvent(
                     event=list(
-                        map(lambda name: Event(string_value=name), self.indented_pass_list)
+                        map(
+                            lambda name: Event(string_value=name),
+                            self.indented_pass_list,
+                        )
                     )
                 )
             )
@@ -312,7 +321,10 @@ class GccMultienvCompilationSession(CompilationSession):
         embedding_msg = self.padded_recv(1024)
         logging.debug("Got embedding")
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
-        self.baseline_embedding = embedding + [self.orig_properties, self.custom_properties]
+        self.baseline_embedding = embedding + [
+            self.orig_properties,
+            self.custom_properties,
+        ]
         rec_data = self.padded_recv(24)
         logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
@@ -422,6 +434,7 @@ class GccMultienvCompilationSession(CompilationSession):
                 except ConnectionRefusedError:
                     continue
                 return
+
 
 if __name__ == "__main__":
     create_and_run_compiler_gym_service(GccMultienvCompilationSession)
