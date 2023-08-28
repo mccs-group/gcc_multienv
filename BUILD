@@ -12,6 +12,7 @@ py_library(
 		"//compiler_gym/service/runtime",
         "//compiler_gym/envs/gcc_multienv/shuffler:actions_py",
         "//compiler_gym/envs/gcc_multienv/datasets",
+        "//compiler_gym/envs/gcc_multienv/embedding",
 	],
     data = [
         "//compiler_gym/envs/gcc_multienv/service:gcc-multienv-service-bin",

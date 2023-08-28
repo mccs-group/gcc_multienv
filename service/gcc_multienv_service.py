@@ -15,6 +15,8 @@ from compiler_gym.service.proto import (
     ListEvent,
     Int64SequenceSpace,
     Int64Tensor,
+    DoubleSequenceSpace,
+    DoubleTensor,
 )
 from compiler_gym.service.runtime import create_and_run_compiler_gym_service
 from shutil import copytree, copy2, rmtree
@@ -22,6 +24,7 @@ from compiler_gym.datasets import BenchmarkUri, Benchmark
 from subprocess import *
 from time import *
 from compiler_gym.envs.gcc_multienv.shuffler import *
+from compiler_gym.envs.gcc_multienv.embedding import *
 import os, sys
 import re
 import socket
@@ -127,23 +130,23 @@ class GccMultienvCompilationSession(CompilationSession):
         ObservationSpace(
             name="embedding",
             space=Space(
-                int64_sequence=Int64SequenceSpace(length_range=Int64Range(min=0)),
+                double_sequence=DoubleSequenceSpace(length_range=Int64Range(min=0)),
             ),
             deterministic=True,
             platform_dependent=True,
             default_observation=Event(
-                int64_value=0,
+                double_value=0.0,
             ),
         ),
         ObservationSpace(
             name="base_embedding",
             space=Space(
-                int64_sequence=Int64SequenceSpace(length_range=Int64Range(min=0)),
+                double_sequence=DoubleSequenceSpace(length_range=Int64Range(min=0)),
             ),
             deterministic=True,
             platform_dependent=True,
             default_observation=Event(
-                int64_value=0,
+                double_value=0.0,
             ),
         ),
     ]
@@ -153,6 +156,8 @@ class GccMultienvCompilationSession(CompilationSession):
     ):
         super().__init__(working_directory, action_space, benchmark)
         self.parsed_bench = BenchmarkUri.from_string(benchmark.uri)
+
+        self.EMBED_LEN_MULTIPLIER = 200
 
         self.baseline_size = None
         self.baseline_runtime_sec = None
@@ -284,13 +289,13 @@ class GccMultienvCompilationSession(CompilationSession):
             return Event(int64_value=self.baseline_size)
         elif observation_space.name == "embedding":
             return Event(
-                int64_tensor=Int64Tensor(
+                double_tensor=DoubleTensor(
                     shape=[len(self.embedding)], value=self.embedding
                 )
             )
         elif observation_space.name == "base_embedding":
             return Event(
-                int64_tensor=Int64Tensor(
+                double_tensor=DoubleTensor(
                     shape=[len(self.baseline_embedding)], value=self.baseline_embedding
                 )
             )
@@ -318,10 +323,10 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Getting baseline")
         self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
         logging.debug("Sent first list")
-        embedding_msg = self.padded_recv(1024)
+        embedding_msg = self.padded_recv(1024 * self.EMBED_LEN_MULTIPLIER)
         logging.debug("Got embedding")
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
-        self.baseline_embedding = embedding + [
+        self.baseline_embedding = self.calc_embedding(embedding) + [
             self.orig_properties,
             self.custom_properties,
         ]
@@ -342,10 +347,13 @@ class GccMultienvCompilationSession(CompilationSession):
         else:
             list_msg = ("\n".join(self.indented_pass_list) + "\n").encode("utf-8")
             self.soc.send(list_msg)
-        embedding_msg = self.padded_recv(1024)
+        embedding_msg = self.padded_recv(1024 * self.EMBED_LEN_MULTIPLIER)
         logging.debug("Got embedding")
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
-        self.embedding = embedding + [self.orig_properties, self.custom_properties]
+        self.embedding = self.calc_embedding(embedding) + [
+            self.orig_properties,
+            self.custom_properties,
+        ]
         rec_data = self.padded_recv(24)
         logging.debug("Got profiling data")
         rec_data = struct.unpack("ddi", rec_data)
@@ -434,6 +442,17 @@ class GccMultienvCompilationSession(CompilationSession):
                 except ConnectionRefusedError:
                     continue
                 return
+
+    def calc_embedding(self, embedding):
+        autophase = embedding[:47]
+        cfg_len = embedding[47]
+        cfg = embedding[48 : 48 + cfg_len]
+        val_flow = embedding[48 + cfg_len :]
+
+        cfg_embedding = list(get_flow2vec_embed(cfg, 25))
+        val_flow_embedding = list(get_flow2vec_embed(val_flow, 25))
+
+        return autophase + cfg_embedding + val_flow_embedding
 
 
 if __name__ == "__main__":
