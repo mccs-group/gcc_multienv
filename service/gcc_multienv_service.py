@@ -38,7 +38,7 @@ class GccMultienvCompilationSession(CompilationSession):
     compiler_version: str = "7.3.0"
 
     actions_lib = setuplib("../shuffler/libactions.so")
-    action_list2 = get_action_list(actions_lib, [], [], 2)
+    action_list2 = get_list_by_list_num(actions_lib, 2)
 
     action_spaces = [
         ActionSpace(
@@ -130,12 +130,14 @@ class GccMultienvCompilationSession(CompilationSession):
         ObservationSpace(
             name="embedding",
             space=Space(
-                double_sequence=DoubleSequenceSpace(length_range=Int64Range(min=0)),
+                double_sequence=DoubleSequenceSpace(length_range=Int64Range(min=0, max=149)),
             ),
             deterministic=True,
             platform_dependent=True,
             default_observation=Event(
-                double_value=0.0,
+                double_tensor=DoubleTensor(
+                    shape=[1], value=[0.0]
+                )
             ),
         ),
         ObservationSpace(
