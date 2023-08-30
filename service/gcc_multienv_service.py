@@ -130,14 +130,14 @@ class GccMultienvCompilationSession(CompilationSession):
         ObservationSpace(
             name="embedding",
             space=Space(
-                double_sequence=DoubleSequenceSpace(length_range=Int64Range(min=0, max=149)),
+                double_sequence=DoubleSequenceSpace(
+                    length_range=Int64Range(min=0, max=149)
+                ),
             ),
             deterministic=True,
             platform_dependent=True,
             default_observation=Event(
-                double_tensor=DoubleTensor(
-                    shape=[1], value=[0.0]
-                )
+                double_tensor=DoubleTensor(shape=[1], value=[0.0])
             ),
         ),
         ObservationSpace(
@@ -215,7 +215,7 @@ class GccMultienvCompilationSession(CompilationSession):
         if action.string_value != "":
             action_string = action.string_value
         else:
-            action_string = self.current_action_space.space.named_discrete.name[
+            action_string = self.action_spaces[0].space.named_discrete.name[
                 action.int64_value
             ]
 
@@ -249,17 +249,6 @@ class GccMultienvCompilationSession(CompilationSession):
             self.pass_list.pop()
             new_space = None
             return True, new_space, True
-        else:
-            new_list = get_action_list(self.actions_lib, [], self.pass_list, 2)
-            if new_list != []:
-                new_space = ActionSpace(
-                    name="new_space",
-                    space=Space(
-                        named_discrete=NamedDiscreteSpace(name=new_list),
-                    ),
-                )
-            else:
-                new_space = None
 
         if action_string == "fix_loops":
             self.indented_pass_list.append("fix_loops")
@@ -270,10 +259,9 @@ class GccMultienvCompilationSession(CompilationSession):
         else:
             self.indented_pass_list.append(action_string)
 
-        self.current_action_space = new_space
         self.get_state()
 
-        return True if new_space == None else False, new_space, False
+        return False, None, False
 
     def get_observation(self, observation_space: ObservationSpace) -> Event:
         logging.info("Computing observation from space %s", observation_space.name)
