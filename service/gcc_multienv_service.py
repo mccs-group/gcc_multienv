@@ -247,8 +247,7 @@ class GccMultienvCompilationSession(CompilationSession):
         if valid_pass_seq(self.actions_lib, self.pass_list, 2) != 0:
             self._lists_valid = False
             self.pass_list.pop()
-            new_space = None
-            return True, new_space, True
+            return True, None, True
 
         if action_string == "fix_loops":
             self.indented_pass_list.append("fix_loops")

@@ -32,12 +32,10 @@ class SizeRuntimeReward(Reward):
         self.base_runtime = None
         self.base_size = None
         self.prev_state_value = None
-        self.prev_runtime_percent = None
 
     def reset(self, benchmark: str, observation_view):
         self.base_runtime = observation_view["base_runtime_sec"]
         self.base_size = observation_view["base_size"]
-        self.prev_runtime_percent = observation_view["runtime_percent"]
         self.prev_state_value = self.state_value(observation_view)
 
     def state_value(self, observation_view):
@@ -46,6 +44,8 @@ class SizeRuntimeReward(Reward):
         if observation_view["runtime_percent"] <= 5.0:
             runtime_normalized = 0.0
         else:
+            if self.base_runtime == 0.0:
+                self.base_runtime = observation_view["runtime_sec"]
             runtime_normalized = (
                 self.base_runtime - observation_view["runtime_sec"]
             ) / self.base_runtime
@@ -63,6 +63,7 @@ class SizeRuntimeReward(Reward):
         diff = new_state_value - self.prev_state_value
         self.prev_state_value = new_state_value
         return diff
+
 
 register(
     id="gcc_multienv-v0",
