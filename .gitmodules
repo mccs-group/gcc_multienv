@@ -6,4 +6,4 @@
 	url = git@github.com:Aleksey2509/gym_gym_backend_backend.git
 [submodule "embedding"]
 	path = embedding
-	url = ./embedding/
+	url = git@github.com:Aleksey2509/Embed_compute_script.git
