@@ -112,4 +112,4 @@ class MultienvDataset(Dataset):
         random.seed(random_state)
         if self.benches == []:
             self.parse_benchmarks()
-        return random.choice(self.benches)
+        return Benchmark.from_file_contents(random.choice(self.benches), None)

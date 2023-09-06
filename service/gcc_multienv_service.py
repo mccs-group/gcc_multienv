@@ -380,9 +380,9 @@ class GccMultienvCompilationSession(CompilationSession):
                     run_arr.append(run_string)
 
             if "bench_repeats" in self.parsed_bench.params:
-                bench_repeats = (
-                    f"""--repeats {self.parsed_bench.params["bench_repeats"][0]}"""
-                )
+                bench_repeats = [
+                    f"--repeats", f"{self.parsed_bench.params['bench_repeats'][0]}"
+                    ]
             else:
                 bench_repeats = ""
 
@@ -411,6 +411,7 @@ class GccMultienvCompilationSession(CompilationSession):
                 plugin_path,
                 name_string,
                 instance_num,
+                *bench_repeats,
             ]
 
             # Start kernel process
