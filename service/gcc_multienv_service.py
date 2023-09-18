@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /usr/bin/env python3
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
@@ -312,19 +312,23 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Getting baseline")
         self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
         logging.debug("Sent first list")
-        embedding_msg = self.padded_recv(1024 * self.EMBED_LEN_MULTIPLIER)
-        logging.debug("Got embedding")
+        data_msg = self.padded_recv(4 + 1024 * self.EMBED_LEN_MULTIPLIER + 24)
+        logging.debug("Got embedding and profiling data")
+        emb_len = struct.unpack('i', data_msg[:4])[0]
+        logging.debug(f"Message (len={len(data_msg)} {data_msg}")
+        logging.debug(f"Embedding length {emb_len}")
+        embedding_msg = data_msg[4:emb_len + 4]
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        logging.debug(f"Embedding int length {len(embedding)}")
         self.baseline_embedding = self.calc_embedding(embedding) + [
             self.orig_properties,
             self.custom_properties,
         ]
-        rec_data = self.padded_recv(24)
-        logging.debug("Got profiling data")
-        rec_data = struct.unpack("ddi", rec_data)
-        self.baseline_size = rec_data[2]
-        self.baseline_runtime_percent = rec_data[0]
-        self.baseline_runtime_sec = rec_data[1]
+        prof_data = data_msg[emb_len + 4:]
+        prof_data = struct.unpack("ddi", prof_data)
+        self.baseline_size = prof_data[2]
+        self.baseline_runtime_percent = prof_data[0]
+        self.baseline_runtime_sec = prof_data[1]
         logging.debug("Got all baseline")
 
     def get_state(self):
@@ -336,19 +340,23 @@ class GccMultienvCompilationSession(CompilationSession):
         else:
             list_msg = ("\n".join(self.indented_pass_list) + "\n").encode("utf-8")
             self.soc.send(list_msg)
-        embedding_msg = self.padded_recv(1024 * self.EMBED_LEN_MULTIPLIER)
-        logging.debug("Got embedding")
+        data_msg = self.padded_recv(4 + 1024 * self.EMBED_LEN_MULTIPLIER + 24)
+        logging.debug("Got embedding and profiling data")
+        emb_len = struct.unpack('i', data_msg[:4])[0]
+        logging.debug(f"Message (len={len(data_msg)} {data_msg}")
+        logging.debug(f"Embedding length {emb_len}")
+        embedding_msg = data_msg[4:emb_len + 4]
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
+        logging.debug(f"Embedding int length {len(embedding)}")
         self.embedding = self.calc_embedding(embedding) + [
             self.orig_properties,
             self.custom_properties,
         ]
-        rec_data = self.padded_recv(24)
-        logging.debug("Got profiling data")
-        rec_data = struct.unpack("ddi", rec_data)
-        self.size = rec_data[2]
-        self.runtime_percent = rec_data[0]
-        self.runtime_sec = rec_data[1]
+        prof_data = data_msg[emb_len + 4:]
+        prof_data = struct.unpack("ddi", prof_data)
+        self.size = prof_data[2]
+        self.runtime_percent = prof_data[0]
+        self.runtime_sec = prof_data[1]
         logging.debug("Got all state")
 
     def attach_backend(self):
