@@ -29,39 +29,29 @@ class SizeRuntimeReward(Reward):
             deterministic=False,
             platform_dependent=True,
         )
-        self.base_runtime = None
-        self.base_size = None
-        self.prev_state_value = None
+        self.RUNTIME_WEIGHT = 0.5
 
     def reset(self, benchmark: str, observation_view):
-        self.base_runtime = observation_view["base_runtime_sec"]
-        self.base_size = observation_view["base_size"]
-        self.prev_state_value = self.state_value(observation_view)
-
-    def state_value(self, observation_view):
-        size_normalized = (self.base_size - observation_view["size"]) / self.base_size
-
-        if observation_view["runtime_percent"] <= 1.0:
-            runtime_normalized = 0.0
-        else:
-            if self.base_runtime == 0.0:
-                self.base_runtime = observation_view["runtime_sec"]
-            runtime_normalized = (
-                self.base_runtime - observation_view["runtime_sec"]
-            ) / self.base_runtime
-
-        if size_normalized < 0:
-            return size_normalized
-        else:
-            if runtime_normalized > 0:
-                return size_normalized
-            else:
-                return size_normalized - math.exp(-runtime_normalized)
+        self.prev_runtime_percent = observation_view['runtime_percent']
+        self.prev_runtime_sec = observation_view['runtime_sec']
+        self.prev_size = observation_view['size']
 
     def update(self, action, observations, observation_view):
-        new_state_value = self.state_value(observation_view)
-        diff = new_state_value - self.prev_state_value
-        self.prev_state_value = new_state_value
+        size_diff_norm = (self.prev_size - observation_view['size']) / self.prev_size
+        if self.prev_runtime_percent < 1 and observation_view['runtime_percent'] < 1:
+            runtime_diff_norm = 0
+        else:
+            if self.prev_runtime_sec == 0:
+                runtime_diff_norm = 1
+            else:
+                runtime_diff_norm = (self.prev_runtime_sec - observation_view['runtime_sec']) / self.prev_runtime_sec
+
+        diff = size_diff_norm + runtime_diff_norm * self.RUNTIME_WEIGHT
+
+        self.prev_runtime_percent = observation_view['runtime_percent']
+        self.prev_runtime_sec = observation_view['runtime_sec']
+        self.prev_size = observation_view['size']
+
         return diff
 
 
