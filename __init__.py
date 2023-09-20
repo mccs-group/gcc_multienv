@@ -41,7 +41,7 @@ class SizeRuntimeReward(Reward):
     def state_value(self, observation_view):
         size_normalized = (self.base_size - observation_view["size"]) / self.base_size
 
-        if observation_view["runtime_percent"] <= 5.0:
+        if observation_view["runtime_percent"] <= 1.0:
             runtime_normalized = 0.0
         else:
             if self.base_runtime == 0.0:
