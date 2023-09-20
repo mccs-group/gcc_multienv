@@ -41,7 +41,7 @@ class MultienvDataset(Dataset):
         else:
             self.benches = []
             for file in chain(
-                self._path.glob("*/benchmark_info.txt"),
+                self._path.glob("**/benchmark_info.txt"),
                 self._path.glob("benchmark_info.txt"),
             ):
                 self.parse_file(file)
