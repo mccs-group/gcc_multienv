@@ -14,17 +14,17 @@ class MultienvDataset(Dataset):
             description="Whatever",
             validatable="No",
         )
-        self._path = None
+        self._paths = []
         self.benches = []
         self._plugin = None
 
     @property
     def path(self):
-        return self._path
+        return self._paths
 
     @path.setter
     def path(self, value):
-        self._path = Path(value)
+        self._paths = [Path(x) for x in value]
 
     @property
     def plugin(self):
@@ -35,16 +35,17 @@ class MultienvDataset(Dataset):
         self._plugin = Path(value)
 
     def parse_benchmarks(self):
-        if self._path == None:
+        if self._paths == []:
             self.benches == [""]
             return
         else:
             self.benches = []
-            for file in chain(
-                self._path.glob("**/benchmark_info.txt"),
-                self._path.glob("benchmark_info.txt"),
-            ):
-                self.parse_file(file)
+            for path in self._paths:
+                for file in chain(
+                    path.glob("**/benchmark_info.txt"),
+                    path.glob("benchmark_info.txt"),
+                ):
+                    self.parse_file(file)
 
     def parse_file(self, file: Path):
         uri_dataset = "multienv"
