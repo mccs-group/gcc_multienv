@@ -156,6 +156,10 @@ class GccMultienvCompilationSession(CompilationSession):
     def __init__(
         self, working_directory: Path, action_space: ActionSpace, benchmark: Benchmark
     ):
+        """
+        Initialize socket corresponding to environment's benchmark and instance number.
+        Attach to existing or create new benchmark backend and get baseline and current (initial) state from it.
+        """
         super().__init__(working_directory, action_space, benchmark)
         self.parsed_bench = BenchmarkUri.from_string(benchmark.uri)
 
@@ -212,6 +216,13 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.info("Started a compilation session for %s", benchmark.uri)
 
     def apply_action(self, action: Event) -> Tuple[bool, Optional[ActionSpace], bool]:
+        """
+        Parse incoming action (may be pass index from the envs action space or pass name).
+        'none_pass' is a special placeholder pass that is ignored by the environment.
+        Check validity of pass name and of the newly formed pass sequence.
+        Postprocess some passes names (append required passes for loop or indent passes with '>')
+        and pass them to the benchmark kernel to get new state observations.
+        """
         if action.string_value != "":
             action_string = action.string_value
         else:
@@ -263,6 +274,9 @@ class GccMultienvCompilationSession(CompilationSession):
         return False, None, False
 
     def get_observation(self, observation_space: ObservationSpace) -> Event:
+        """
+        This function wraps the observations into right protobuf type for CompilerGym to correctly process it in the environment frontend
+        """
         logging.info("Computing observation from space %s", observation_space.name)
         if observation_space.name == "runtime_sec":
             return Event(double_value=self.runtime_sec)
@@ -303,12 +317,21 @@ class GccMultienvCompilationSession(CompilationSession):
             raise KeyError(observation_space.name)
 
     def padded_recv(self, size):
+        """
+        Benchmark kernel occasionaly sends empty packets as a way to check if environment exists or not.
+        Because of this, all the receives should be ready to discard such packet, as they are meaningless for
+        the environment.
+        """
         while True:
             data = self.soc.recv(size)
             if data != bytes(0):
                 return data
 
     def get_baseline(self):
+        """
+        Get the baseline of the current function, to fill
+        `baseline_size`, `baseline_runtime_sec` and `baseline_runtime_percent` fields
+        """
         logging.debug("Getting baseline")
         self.soc.send(bytes(1))  # Send empty list (plugin will use default passes)
         logging.debug("Sent first list")
@@ -332,6 +355,11 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Got all baseline")
 
     def get_state(self):
+        """
+        To get the result of compiling with current pass list the environment sends it to the kernel and
+        receives a single packet of data from it. The kernel response contains new function size, profiling data,
+        and data needed to calculate the embedding vector.
+        """
         logging.debug("Getting state")
         if self.indented_pass_list == []:
             self.soc.send(
@@ -360,6 +388,15 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Got all state")
 
     def attach_backend(self):
+        """
+        We use benchmark kernel working directory a kind of synchronization mechanism that lets environments
+        know that benchmark kernel already exists and prevent race condition on benchmark kernel creation
+
+
+        Environment attempts creating working directory for its benchmark kernel, and if creation fails - connects to already existing kernel.
+        If the directory was successfully created, this function uses BenchmarkUri to create startup (command line) option for the kernel, and
+        runs the benchmark kernel script.
+        """
         kernel_dir = f"/tmp/{self.bench_name}:backend_{self.instance}"
 
         try:
@@ -442,6 +479,15 @@ class GccMultienvCompilationSession(CompilationSession):
                 return
 
     def calc_embedding(self, embedding):
+        """
+        Calculate actual embedding vector from the control and value flow graphs
+        that we got from the bench backend
+        (bench backend just relays embedding that it gets from plugin).
+
+        After embedding vector calculation we append (not in this function) current state properties
+        (to give our compilation process the Markov property and also to prevent actor from choosing actions
+        that will break the compiler)
+        """
         autophase = embedding[:47]
         cfg_len = embedding[47]
         cfg = embedding[48 : 48 + cfg_len]

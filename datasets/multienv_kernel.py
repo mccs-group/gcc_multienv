@@ -1,3 +1,8 @@
+"""
+CompilerGym dataset that parses benchmark_info.txt
+files and creates benchmark objects from them
+"""
+
 from compiler_gym.datasets import Benchmark, Dataset, BenchmarkUri
 from typing import Iterable
 from pathlib import Path
@@ -35,6 +40,9 @@ class MultienvDataset(Dataset):
         self._plugin = Path(value)
 
     def parse_benchmarks(self):
+        """
+        Recursively parses benchmark_info.txt files in directories listed in self._paths
+        """
         if self._paths == []:
             self.benches == [""]
             return
@@ -48,6 +56,9 @@ class MultienvDataset(Dataset):
                     self.parse_file(file)
 
     def parse_file(self, file: Path):
+        """
+        Parses one benchmark_info.txt file and creates a BenchmarkUri from its contents
+        """
         uri_dataset = "multienv"
         uri_path = str(file.resolve().parent) + "/"
         lines = [x.strip() for x in file.read_text().splitlines()]
