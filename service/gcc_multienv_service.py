@@ -137,7 +137,7 @@ class GccMultienvCompilationSession(CompilationSession):
             deterministic=True,
             platform_dependent=True,
             default_observation=Event(
-                double_tensor=DoubleTensor(shape=[1], value=[0.0])
+                double_tensor=DoubleTensor(shape=[149], value=[0.0] * 149)
             ),
         ),
         ObservationSpace(
@@ -213,6 +213,11 @@ class GccMultienvCompilationSession(CompilationSession):
 
         self.get_state()
 
+        self.init_size = self.size
+        self.init_embedding = self.embedding
+        self.init_runtime_sec = self.runtime_sec
+        self.init_runtime_percent = self.runtime_percent
+
         logging.info("Started a compilation session for %s", benchmark.uri)
 
     def apply_action(self, action: Event) -> Tuple[bool, Optional[ActionSpace], bool]:
@@ -230,44 +235,65 @@ class GccMultienvCompilationSession(CompilationSession):
                 action.int64_value
             ]
 
-        logging.info("Applying action %s", action_string)
+        actions_list = []
+        if "\n" not in action_string:
+            actions_list = [action_string]
+        else:
+            actions_list = action_string.split("\n")
 
-        if (
-            re.match(
-                "none_pass",
+        if actions_list[0] == "another_try":
+            self._lists_valid = True
+            self.pass_list = []
+            self.indented_pass_list = []
+            self.current_action_space = self.action_spaces[0]
+            self.orig_properties, self.custom_properties = get_property_by_history(
+                self.actions_lib, self.pass_list, 2
+            )
+            self.size = self.init_size
+            self.embedding = self.init_embedding
+            self.runtime_sec = self.init_runtime_sec
+            self.runtime_percent = self.init_runtime_percent
+            return True, None, False
+
+        for action_string in actions_list:
+            logging.info("Applying action %s", action_string)
+
+            if (
+                re.match(
+                    "none_pass",
+                    action_string[1:] if action_string[0] == ">" else action_string,
+                )
+                != None
+            ):
+                continue
+
+            list_num = get_pass_list(
+                self.actions_lib,
                 action_string[1:] if action_string[0] == ">" else action_string,
             )
-            != None
-        ):
-            return False, None, False
+            if list_num != 2:
+                raise ValueError(f"Unknown pass {action_string}")
 
-        list_num = get_pass_list(
-            self.actions_lib,
-            action_string[1:] if action_string[0] == ">" else action_string,
-        )
-        if list_num != 2:
-            raise ValueError(f"Unknown pass {action_string}")
+            self.orig_properties, self.custom_properties = get_property_by_history(
+                self.actions_lib, self.pass_list, 2
+            )
 
-        self.orig_properties, self.custom_properties = get_property_by_history(
-            self.actions_lib, self.pass_list, 2
-        )
+            self.pass_list.append(action_string)
 
-        self.pass_list.append(action_string)
+            self._lists_valid = True
+            if valid_pass_seq(self.actions_lib, self.pass_list, 2) != 0:
+                self._lists_valid = False
+                self.pass_list.pop()
+                return True, None, True
 
-        self._lists_valid = True
-        if valid_pass_seq(self.actions_lib, self.pass_list, 2) != 0:
-            self._lists_valid = False
-            self.pass_list.pop()
-            return True, None, True
-
-        if action_string == "fix_loops":
-            self.indented_pass_list.append("fix_loops")
-            self.indented_pass_list.append("loop")
-            self.indented_pass_list.append(">loopinit")
-        elif in_loop(self.actions_lib, self.custom_properties):
-            self.indented_pass_list.append(">" + action_string)
-        else:
-            self.indented_pass_list.append(action_string)
+            if action_string == "fix_loops":
+                self.indented_pass_list.append("fix_loops")
+                self.indented_pass_list.append("loop")
+                self.indented_pass_list.append(">loopinit")
+            elif in_loop(self.actions_lib, self.custom_properties):
+                self.indented_pass_list.append(">" + action_string)
+            else:
+                self.indented_pass_list.append(action_string)
 
         self.get_state()
 
@@ -337,17 +363,17 @@ class GccMultienvCompilationSession(CompilationSession):
         logging.debug("Sent first list")
         data_msg = self.padded_recv(4 + 1024 * self.EMBED_LEN_MULTIPLIER + 24)
         logging.debug("Got embedding and profiling data")
-        emb_len = struct.unpack('i', data_msg[:4])[0]
+        emb_len = struct.unpack("i", data_msg[:4])[0]
         logging.debug(f"Message (len={len(data_msg)} {data_msg}")
         logging.debug(f"Embedding length {emb_len}")
-        embedding_msg = data_msg[4:emb_len + 4]
+        embedding_msg = data_msg[4 : emb_len + 4]
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
         logging.debug(f"Embedding int length {len(embedding)}")
         self.baseline_embedding = self.calc_embedding(embedding) + [
             self.orig_properties,
             self.custom_properties,
         ]
-        prof_data = data_msg[emb_len + 4:]
+        prof_data = data_msg[emb_len + 4 :]
         prof_data = struct.unpack("ddi", prof_data)
         self.baseline_size = prof_data[2]
         self.baseline_runtime_percent = prof_data[0]
@@ -370,17 +396,17 @@ class GccMultienvCompilationSession(CompilationSession):
             self.soc.send(list_msg)
         data_msg = self.padded_recv(4 + 1024 * self.EMBED_LEN_MULTIPLIER + 24)
         logging.debug("Got embedding and profiling data")
-        emb_len = struct.unpack('i', data_msg[:4])[0]
+        emb_len = struct.unpack("i", data_msg[:4])[0]
         logging.debug(f"Message (len={len(data_msg)} {data_msg}")
         logging.debug(f"Embedding length {emb_len}")
-        embedding_msg = data_msg[4:emb_len + 4]
+        embedding_msg = data_msg[4 : emb_len + 4]
         embedding = [x[0] for x in struct.iter_unpack("i", embedding_msg)]
         logging.debug(f"Embedding int length {len(embedding)}")
         self.embedding = self.calc_embedding(embedding) + [
             self.orig_properties,
             self.custom_properties,
         ]
-        prof_data = data_msg[emb_len + 4:]
+        prof_data = data_msg[emb_len + 4 :]
         prof_data = struct.unpack("ddi", prof_data)
         self.size = prof_data[2]
         self.runtime_percent = prof_data[0]
@@ -426,8 +452,9 @@ class GccMultienvCompilationSession(CompilationSession):
 
             if "bench_repeats" in self.parsed_bench.params:
                 bench_repeats = [
-                    f"--repeats", f"{self.parsed_bench.params['bench_repeats'][0]}"
-                    ]
+                    f"--repeats",
+                    f"{self.parsed_bench.params['bench_repeats'][0]}",
+                ]
             else:
                 bench_repeats = ""
 
