@@ -1,9 +1,9 @@
 [submodule "shuffler"]
 	path = shuffler
-	url = ../Reorder_python_link.git
+	url = ../gcc_pho_shuffler.git
 [submodule "kernel"]
 	path = kernel
-	url = ../gym_gym_backend_backend.git
+	url = ../gcc_multienv_kernel.git
 [submodule "embedding"]
 	path = embedding
 	url = ../Embed_compute_script.git
